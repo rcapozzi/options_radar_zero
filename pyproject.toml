@@ -1,0 +1,127 @@
+[project]
+name = "options-radar-zero"
+version = "0.1.0"
+description = "Options Radar Zero - Real-time 0DTE option chain monitoring for SPX, SPY, and ES"
+authors = [{ name = "rcapozzi" }]
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "plotly>=5.0",
+    "dash>=2.14",
+    "pyarrow>=14.0",
+    "fastparquet>=2023.10",
+    "pandas-market-calendars>=1.0",
+    "jinja2>=3.1",
+    "yfinance>=0.2",
+    "dash-bootstrap-components>=1.6",
+    "dash-mantine-components>=1.0",
+    "dash-iconify>=0.1",
+    "dash-extendable-graph>=1.0",
+    "filelock>=3.12",
+    "typer>=0.9",
+    "persist-cache>=0.1",
+    "tastytrade>=0.1",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "ruff>=0.1.13",
+    "mypy>=1.7",
+    "types-pyyaml>=6.0",
+    "pandas-stubs>=2.0",
+    "types-pytz>=2024.1.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = ["examples/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["options_radar_zero"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+exclude = ["examples/"]
+
+[[tool.mypy.overrides]]
+module = [
+    "tests.*",
+]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+    "options_radar_zero.callbacks",
+    "options_radar_zero.routes",
+    "options_radar_zero.tt_poll_market_data",
+    "options_radar_zero.tastytrade_api",
+]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+    "dash.*",
+    "dash_mantine_components.*",
+    "dash_bootstrap_components.*",
+    "dash_extendable_graph.*",
+    "dash_iconify.*",
+    "plotly.*",
+    "pandas_market_calendars.*",
+    "yfinance.*",
+    "tastytrade.*",
+    "persist_cache.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "examples.polling",
+    "examples.react",
+]
+ignore_errors = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "--cov=. --cov-report=term-missing --cov-fail-under=90 --cov-config=pyproject.toml"
+
+[tool.coverage.run]
+omit = [
+    "examples/*",
+    "src/options_radar_zero/tastytrade_api.py",
+    "src/options_radar_zero/tt_poll_market_data.py",
+    "src/options_radar_zero/callbacks.py",
+    "src/options_radar_zero/app.py",
+    "tests/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+]
+
+[tool.uv]
+package = true
+default-groups = ["dev"]

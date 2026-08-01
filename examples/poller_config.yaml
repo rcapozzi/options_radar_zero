@@ -1,0 +1,14 @@
+# Poller configuration for multi-symbol polling
+# Place in project root or pass path via --config flag
+
+output_dir: ./output
+
+symbols:
+  - symbol: SPY
+    strikes: 40
+  - symbol: QQQ
+    strikes: 40
+  - symbol: SPX
+    strikes: 30
+  - symbol: ES
+    strikes: 20
