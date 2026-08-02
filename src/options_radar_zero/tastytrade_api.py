@@ -1,6 +1,15 @@
+"""TastyTrade API wrapper.
+
+Provides async access to option chain data and market data from the
+TastyTrade API, with optional caching via persist_cache.
+"""
+
+from __future__ import annotations
+
 import asyncio
 from collections import defaultdict
 from datetime import date, timedelta
+from typing import Any
 
 from persist_cache import cache
 from tastytrade.instruments import NestedOptionChain, Option, get_option_chain
@@ -9,67 +18,66 @@ from tastytrade.session import Session
 
 
 class TastyTradeAPI:
-    def __init__(self, session: Session):
+    """Wrapper around the TastyTrade async API with caching."""
+
+    def __init__(self, session: Session) -> None:
         self.session = session
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict[str, Any]:
         # copy everything except things with lock such as Session
         state = self.__dict__.copy()
         state.pop("session", None)
         return state
 
-    """
-    def __setstate__(self, state):
+    def __setstate__(self, state: dict[str, Any]) -> None:
         # restore data
         self.__dict__.update(state)
         # recreate a fresh lock
-        self._lock = threading.RLock()
-    # @cache(expiry=timedelta(hours=12))
-    """
+        # (persist_cache manages its own locking internally)
 
     @cache(expiry=timedelta(hours=12))
     def get_option_chain(self, symbol: str) -> dict[date, list[Option]]:
-        """
-        oc[today][0:1]
+        """Fetch the option chain for a symbol (cached, 12-hour expiry).
+
+        Returns a dict mapping expiration date → list of Option objects.
         """
         return get_option_chain(self.session, symbol)
 
-
     @cache(expiry=timedelta(hours=12))
     async def get_nested_option_chain(self, symbol: str) -> NestedOptionChain:
-        """
-        noc.expirations[0]
+        """Fetch the nested option chain for a symbol (cached, 12-hour expiry).
+
+        Returns the NestedOptionChain containing strikes with call/put data.
         """
         return (await NestedOptionChain.get(self.session, symbol))[0]
 
     @cache(expiry=timedelta(hours=12))
-    async def get_0dte_option_symbols(self, symbol: str):
+    async def get_0dte_option_symbols(self, symbol: str) -> list[str]:
+        """Get 0DTE option symbols for a symbol (cached, 12-hour expiry)."""
         noc = await self.get_nested_option_chain(symbol)
-        return [x for strike in noc.expirations[0].strikes for x in (strike.call, strike.put)]
+        return [
+            str(x)
+            for strike in noc.expirations[0].strikes
+            for x in (strike.call, strike.put)
+        ]
 
+    async def get_market_data(
+        self,
+        kwargs: dict[str, Any],
+    ) -> list[MarketData]:
+        """Call the market-data endpoint to get real-time trading data.
 
-    def get_market_data(self, kwargs):
+        Wraps ``get_market_data_by_type`` (which is async) and awaits it
+        so callers receive actual ``MarketData`` objects, not coroutines.
+
+        Example::
+
+            quote = await api.get_market_data({"equities": ["SPY"]})[0]
         """
-        Call the '/market-data/' end point to get real time trading data like last and volume.
+        return await get_market_data_by_type(self.session, **kwargs)
 
-        Example:
-        quote = api.get_market_data({ 'equities':['SPY'] })[0]
-        """
-
-        # valid = {
-        #     "cryptocurrencies",
-        #     "equities",
-        #     "futures",
-        #     "future_options",
-        #     "indices",
-        #     "options",
-        # }
-        # if asset_type not in valid:
-        #     raise ValueError(f"unknown asset type {asset_type!r}, must be one of {valid}")
-        #return get_market_data_batch(self.session, **kwargs)
-        return get_market_data_by_type(self.session, **kwargs)
-
-    async def a_get_market_data_batch(self,
+    async def a_get_market_data_batch(
+        self,
         cryptocurrencies: list[str] | None = None,
         equities: list[str] | None = None,
         futures: list[str] | None = None,
@@ -77,22 +85,12 @@ class TastyTradeAPI:
         indices: list[str] | None = None,
         options: list[str] | None = None,
     ) -> list[MarketData]:
-        session = self.session
-        """
-        Gets market data for the given symbols grouped by instrument type.
-        This function will automatically handle chunking of symbols to respect the
-        API limit of 100 symbols per request. This is the async version.
+        """Gets market data for the given symbols grouped by instrument type.
 
-        :param session: active session to use
-        :param cryptocurrencies: list of cryptocurrencies to fetch
-        :param equities: list of equities to fetch
-        :param futures: list of futures to fetch
-        :param future_options: list of future options to fetch
-        :param indices: list of indices to fetch
-        :param options: list of options to fetch
+        Automatically handles chunking of symbols to respect the API limit
+        of 100 symbols per request.
         """
-        # Create list[tuple[str,str]] = []
-        all_symbols = [
+        all_symbols: list[tuple[str, str]] = [
             (sym_type, s)
             for sym_type, symbols in {
                 "cryptocurrencies": cryptocurrencies,
@@ -106,60 +104,13 @@ class TastyTradeAPI:
             for s in symbols
         ]
 
-        tasks = []
+        tasks: list[Any] = []
         for i in range(0, len(all_symbols), 100):
             chunk = all_symbols[i : i + 100]
             kwargs: dict[str, list[str]] = defaultdict(list)
             for sym_type, symbol in chunk:
                 kwargs[sym_type].append(symbol)
-            tasks.append(get_market_data_by_type(session, **kwargs))
+            tasks.append(get_market_data_by_type(self.session, **kwargs))
 
         results = await asyncio.gather(*tasks)
         return [item for sublist in results for item in sublist]
-
-    def get_market_data_batch(self, kwargs) -> list[MarketData]:
-        return get_market_data_batch(self.session, **kwargs)
-
-
-
-def get_market_data_batch(
-    session: Session,
-    cryptocurrencies: list[str] | None = None,
-    equities: list[str] | None = None,
-    futures: list[str] | None = None,
-    future_options: list[str] | None = None,
-    indices: list[str] | None = None,
-    options: list[str] | None = None,
-) -> list[MarketData]:
-    """
-    Gets market data for the given symbols grouped by instrument type.
-    This function will automatically handle chunking of symbols to respect the
-    API limit of 100 symbols per request.
-
-    """
-    # Create list[tuple[str,str]] = []
-    all_symbols = [
-        (sym_type, s)
-        for sym_type, symbols in {
-            "cryptocurrencies": cryptocurrencies,
-            "equities": equities,
-            "futures": futures,
-            "future_options": future_options,
-            "indices": indices,
-            "options": options,
-        }.items()
-        if symbols
-        for s in symbols
-    ]
-
-    results = []
-    for i in range(0, len(all_symbols), 100):
-        chunk = all_symbols[i : i + 100]
-        kwargs: dict[str, list[str]] = defaultdict(list)
-        for sym_type, symbol in chunk:
-            kwargs[sym_type].append(symbol)
-        results.extend(get_market_data_by_type(session, **kwargs))
-
-    return results
-
-

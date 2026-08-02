@@ -49,7 +49,7 @@ async def _poll_single_symbol(
             break
 
         try:
-            quote_list = api.get_market_data({"equities": [symbol]})
+            quote_list = await api.get_market_data({"equities": [symbol]})
             if not quote_list:
                 logger.warning("Could not get quote for underlying %s", symbol)
                 await asyncio.sleep(60)
@@ -108,7 +108,7 @@ async def _end_of_day_catchup(
     option_symbols = chain_selection.option_symbols
 
     try:
-        quote_list = api.get_market_data({"equities": [symbol]})
+        quote_list = await api.get_market_data({"equities": [symbol]})
         if not quote_list:
             logger.warning("Could not get quote for underlying %s", symbol)
             return

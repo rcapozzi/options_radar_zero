@@ -55,7 +55,7 @@ class OptionChainSelector:
         Returns:
             The last price as a Decimal, or None if unavailable.
         """
-        quote_list = self._api.get_market_data({"equities": [symbol]})
+        quote_list = await self._api.get_market_data({"equities": [symbol]})
         if not quote_list:
             logger.error("Could not get initial quote for underlying %s", symbol)
             return None

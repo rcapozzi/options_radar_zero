@@ -44,5 +44,9 @@ build/
 access.log
 .*.lock
 
+# Cache
+.persist_cache/
+
+
 # Ignore Tastytrade API docs (external reference material)
 docs/tastytrade-api/
