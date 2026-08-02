@@ -94,7 +94,7 @@ class OptionChainSelector:
         selected_strikes = self._select_strikes_around_money(all_strikes, underlying_price, num_strikes)
         option_symbols = [s.call for s in selected_strikes] + [s.put for s in selected_strikes]
 
-        logger.info("Monitoring %d option symbols.", len(option_symbols))
+        logger.info("Monitoring %d option symbols for %s.", len(option_symbols), symbol)
 
         return ChainSelection(
             expiration_date=expiration_date,
