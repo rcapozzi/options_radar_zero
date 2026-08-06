@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from functools import cached_property
 from typing import Any
 
@@ -74,9 +74,27 @@ class PollerConfig:
 
         return cls.from_dict(data)
 
-    def filename_for(self, symbol: str) -> str:
-        """Generate the parquet filename for a symbol on today's date."""
-        ymd = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y%m%d")
+    @classmethod
+    def single(cls, symbol: str, strikes: int = 40, output_dir: str = ".") -> PollerConfig:
+        """Create a single-symbol config (useful for testing)."""
+        return cls(output_dir=output_dir, symbols=[SymbolConfig(symbol=symbol, strikes=strikes)])
+
+    def filename_for(self, symbol: str, trade_date: date | None = None) -> str:
+        """Generate the parquet filename for a symbol.
+
+        Uses ``trade_date`` if provided (useful for end-of-day catch-up
+        to match the last trading day).  Otherwise defaults to today's
+        date in US/Eastern timezone.
+
+        Args:
+            symbol: The underlying symbol.
+            trade_date: Optional specific date to use in the filename.
+                If None, uses today's date in US/Eastern.
+        """
+        if trade_date is None:
+            ymd = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y%m%d")
+        else:
+            ymd = trade_date.strftime("%Y%m%d")
         return os.path.join(self.output_dir, f"{symbol}.{ymd}.chain.parquet")
 
     @cached_property

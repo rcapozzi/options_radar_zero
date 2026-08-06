@@ -5,11 +5,14 @@ that can be injected into callbacks and routes for testability.
 """
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
 from options_radar_zero.config import get_parquet_files
 from options_radar_zero.utils import OptionQuotes
+
+logger = logging.getLogger(__name__)
 
 
 class DataLoader:
@@ -38,19 +41,26 @@ class DataLoader:
         """Discover and load all available option chain files.
 
         Returns:
-            True if data was loaded successfully, False otherwise.
+            True if at least one file was loaded successfully, False otherwise.
         """
-        symbols: list[str] = ['SPX.X']
+        symbols: list[str] = ['SPY']
         try:
             files = self._file_finder()
             for k, v in files.items():
-                self._option_quotes[k] = OptionQuotes(symbol=k, filename=v)
-            symbols.extend(sorted(files.keys(), reverse=True))
+                try:
+                    self._option_quotes[k] = OptionQuotes(symbol=k, filename=v)
+                    symbols.append(k)
+                except Exception:
+                    logger.warning("Failed to create OptionQuotes for %s: %s", k, v)
             self._symbols = sorted(self._option_quotes.keys(), reverse=True)
             if not self._symbols:
                 self._loaded = False
                 return False
-            self._option_quotes[self._symbols[0]].reload()
+            # Try to reload the first symbol's data
+            try:
+                self._option_quotes[self._symbols[0]].reload()
+            except Exception as e:
+                logger.warning("Error loading data for %s: %s", self._symbols[0], e)
             self._loaded = True
             return True
         except Exception as e:

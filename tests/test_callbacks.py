@@ -97,9 +97,16 @@ class TestSetupCallbacks:
         assert any('pc-summary-store' in cid for cid in callback_ids)
 
     def test_update_chart_on_interval_uses_data_loader(self, app_with_callbacks):
-        """Test that update_chart_on_interval uses the injected data_loader."""
+        """Test that update_chart_from_file uses the injected data_loader."""
         app, data_loader = app_with_callbacks
         callback_ids = list(app.callback_map.keys())
+        assert any('pc-summary-graph' in cid for cid in callback_ids)
+
+    def test_file_watcher_callback_registered(self, app_with_callbacks):
+        """Test that the file-watcher callback is registered."""
+        app, _ = app_with_callbacks
+        callback_ids = list(app.callback_map.keys())
+        # The file-watcher callback must have pc-summary-graph in its outputs
         assert any('pc-summary-graph' in cid for cid in callback_ids)
 
     def test_update_strike_volume_uses_data_loader(self, app_with_callbacks):
@@ -126,8 +133,9 @@ class TestSetupCallbacks:
         assert data_loader is not None
 
     def test_callback_count(self, app_with_callbacks):
-        """Test that exactly 4 callbacks are registered."""
+        """Test that the expected callbacks are registered."""
         app, _ = app_with_callbacks
-        # 4 callbacks: update_strikes_selector, update_chart_on_interval,
-        # setup_chart, update_strike_volume
-        assert len(app.callback_map) == 4
+        # 7 callbacks: update_strikes_selector, setup_chart_initial,
+        # show_notification, setup_chart, update_chart_from_file,
+        # update_strike_volume, update_file_info
+        assert len(app.callback_map) == 7

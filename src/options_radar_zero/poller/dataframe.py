@@ -15,6 +15,24 @@ from options_radar_zero.poller.models import StrikeInfo
 
 logger = logging.getLogger(__name__)
 
+# Legacy column aliases — normalize old-format parquet files when merging
+_LEGACY_ALIASES: dict[str, str] = {
+    "last_trade_at": "processDateTime",
+    "strike": "strikePrice",
+    "price": "mark",
+    "day_volume": "totalVolume",
+    "underlying_price": "underlyingPrice",
+    "open_interest": "openInterest",
+}
+
+
+def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Rename legacy column names to the current canonical format."""
+    for old_name, new_name in _LEGACY_ALIASES.items():
+        if old_name in df.columns and new_name not in df.columns:
+            df.rename(columns={old_name: new_name}, inplace=True)
+    return df
+
 
 def create_dataframe_from_market_data(
     market_data: list[MarketData],
@@ -24,6 +42,9 @@ def create_dataframe_from_market_data(
     sym2strike: dict[str, StrikeInfo],
 ) -> pd.DataFrame:
     """Create a Pandas DataFrame from a list of MarketData objects.
+
+    The column names are designed to match the dashboard's
+    ``transform_option_data`` function and historical data format.
 
     Args:
         market_data: List of MarketData objects from TastyTrade.
@@ -38,20 +59,20 @@ def create_dataframe_from_market_data(
     data: list[dict[str, Any]] = []
     for md in market_data:
         strike_info = sym2strike[md.symbol]
-        row = {
-            "last_trade_at": pd.to_datetime(md.updated_at, utc=True),
-            "created_at": created_at,
+        row: dict[str, Any] = {
+            "processDateTime": pd.to_datetime(md.updated_at, utc=True),
             "symbol": strike_info.streamer_symbol,
             "putCall": strike_info.type,
-            "strike": strike_info.strike_price,
-            "bid": md.bid,
-            "ask": md.ask,
-            "price": md.last,
-            "open_interest": md.open_interest,
-            "delta": 0,
-            "day_volume": md.volume,
-            "underlying_price": underlying_price,
-            "expiration_date": expiration_date,
+            "strikePrice": float(strike_info.strike_price),
+            "bid": float(md.bid) if md.bid is not None else 0.0,
+            "ask": float(md.ask) if md.ask is not None else 0.0,
+            "mark": float(md.mark) if md.mark is not None else (
+                float(md.last) if md.last is not None else 0.0
+            ),
+            "totalVolume": float(md.volume) if md.volume else 0.0,
+            "openInterest": float(md.open_interest) if md.open_interest else 0.0,
+            "underlyingPrice": float(underlying_price),
+            "processDate": created_at.strftime("%Y-%m-%d"),
         }
         data.append(row)
     return pd.DataFrame(data)
@@ -63,6 +84,9 @@ def merge_save_df(
     filename: str,
 ) -> pd.DataFrame:
     """Merge two dataframes and save the result to a parquet file.
+
+    Normalizes legacy column names from existing parquet files so they
+    can be merged with new-format data.
 
     Args:
         df: Existing DataFrame (may be None if no prior data).
@@ -77,7 +101,7 @@ def merge_save_df(
 
     if df is None:
         if os.path.exists(filename):
-            df = pd.read_parquet(filename)
+            df = _normalize_columns(pd.read_parquet(filename))
         else:
             logger.info("Creating new file: %s", filename)
             df_new.to_parquet(filename)
@@ -85,7 +109,7 @@ def merge_save_df(
 
     combined_df = pd.concat([df, df_new], ignore_index=True)
     combined_df.drop_duplicates(
-        subset=["symbol", "last_trade_at"],
+        subset=["symbol", "processDateTime"],
         keep="last",
         inplace=True,
     )

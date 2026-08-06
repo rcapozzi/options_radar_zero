@@ -132,6 +132,29 @@ class MarketIntervalCalculator:
 
         return False
 
+    def get_last_trade_date(self) -> datetime.date | None:
+        """Return the most recent NYSE trading date at or before today.
+
+        If today is a trading day (even after close), returns today.
+        If today is a weekend or holiday, returns the previous trading day.
+        """
+        now = datetime.datetime.now(self._market_tz)
+        check_date = now.date()
+
+        # If market is open today, today IS the last trade date
+        schedule_today = self._get_market_schedule_for_date(check_date)
+        if schedule_today is not None and not schedule_today.empty:
+            return check_date
+
+        # Search backward for the most recent trading day
+        for _ in range(10):  # Search up to 10 days back
+            check_date -= datetime.timedelta(days=1)
+            schedule = self._get_market_schedule_for_date(check_date)
+            if schedule is not None and not schedule.empty:
+                return check_date
+
+        return None
+
 
 def is_market_open() -> bool:
     """Convenience function: check if NYSE market is currently open.

@@ -55,6 +55,7 @@ def _create_session() -> Any:
 async def _run_poller(
     config: PollerConfig,
     market_interval_calculator: MarketIntervalCalculator,
+    eod: bool = False,
 ) -> None:
     """Create a session and run the polling loop for all symbols.
 
@@ -64,21 +65,21 @@ async def _run_poller(
     all symbols.
 
     If the market is open, ``poll_symbols`` enters a live polling loop
-    until close.  If the market is closed, it performs an end-of-day
-    catch-up instead.
+    until close.  If the market is closed and ``eod`` is True, it performs
+    an end-of-day catch-up instead.
     """
     session = _create_session()
     from options_radar_zero.tastytrade_api import TastyTradeAPI
 
     api: Any = TastyTradeAPI(session)
-    await poll_symbols(config, api, market_interval_calculator)
+    await poll_symbols(config, api, market_interval_calculator, run_eod=eod)
 
 
 @cli.command(
-    help=(
-        "Polls 0DTE option chain data and saves to parquet. "
-        "Requires YAML config (--config). When market is closed, "
-        "performs end-of-day catch-up."
+    help=(\
+        "Polls 0DTE option chain data and saves to parquet. "\
+        "Requires YAML config (--config). When market is open, polls live. "\
+        "When market is closed, only runs end-of-day catch-up with --eod flag."
     )
 )
 def main(
@@ -89,6 +90,9 @@ def main(
         str | None, Option("--output-dir", "-o", help="Override output dir from config.")
     ] = None,
     verbose: Annotated[bool, Option("--verbose", "-v", help="Enable verbose logging.")] = False,
+    eod: Annotated[
+        bool, Option("--eod", help="Run end-of-day catch-up when market is closed.")
+    ] = False,
 ) -> None:
     """Main entry point for the polling application.
 
@@ -96,6 +100,7 @@ def main(
         config_path: Path to YAML config file (required).
         output_dir: Override output directory from config.
         verbose: Enable verbose logging.
+        eod: Run end-of-day catch-up when market is closed.
     """
     global logger
     logger = setup_logging(verbose)
@@ -122,9 +127,12 @@ def main(
             if market_interval_calculator.is_market_open():
                 logger.info("Market is open. Starting live polling.")
             else:
-                logger.info("Market is closed. Will perform end-of-day catch-up.")
+                if eod:
+                    logger.info("Market is closed. Will perform end-of-day catch-up.")
+                else:
+                    logger.info("Market is closed. Exiting (use --eod for catch-up).")
 
-            asyncio.run(_run_poller(config, market_interval_calculator))
+            asyncio.run(_run_poller(config, market_interval_calculator, eod=eod))
     except FileLockTimeout:
         logger.warning("Another instance of the poller is already running. Exiting.")
         sys.exit(0)

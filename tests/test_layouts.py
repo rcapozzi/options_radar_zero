@@ -9,32 +9,8 @@ from options_radar_zero.layouts import (
     create_hidden_components,
     create_main_layout,
     create_metrics_container,
-    create_static_link,
     create_strike_slider,
 )
-
-
-class TestCreateStaticLink:
-    def test_returns_html_a(self):
-        """Test that create_static_link returns an html.A component."""
-        link = create_static_link('test')
-        assert link is not None
-
-    def test_has_correct_href(self):
-        """Test that the link has the correct href."""
-        link = create_static_link('test')
-        # Dash html.A stores href in its props
-        assert link.href == 'static/test.html'
-
-    def test_has_correct_children(self):
-        """Test that the link has the correct children text."""
-        link = create_static_link('test')
-        assert link.children == 'test.html'
-
-    def test_has_target_blank(self):
-        """Test that the link opens in a new tab."""
-        link = create_static_link('test')
-        assert link.target == '_blank'
 
 
 class TestCreateStrikeSlider:
@@ -88,6 +64,49 @@ class TestCreateHiddenComponents:
         hidden = create_hidden_components()
         children = hidden.children
         assert children is not None
+
+    def test_has_file_watcher_interval(self):
+        """Test that hidden components include the file-watcher interval."""
+        hidden = create_hidden_components()
+        children = hidden.children
+        assert children is not None
+        # Find the file-watcher Interval among children
+        ids = []
+
+        def extract_ids(component):
+            if hasattr(component, 'id'):
+                ids.append(component.id)
+            if hasattr(component, 'children'):
+                ch = component.children
+                if isinstance(ch, list):
+                    for c in ch:
+                        extract_ids(c)
+                elif ch is not None:
+                    extract_ids(ch)
+        for child in children:
+            extract_ids(child)
+        assert 'file-watcher' in ids
+
+    def test_has_file_state_store(self):
+        """Test that hidden components include the pc-summary-file-state store."""
+        hidden = create_hidden_components()
+        children = hidden.children
+        assert children is not None
+        ids = []
+
+        def extract_ids(component):
+            if hasattr(component, 'id'):
+                ids.append(component.id)
+            if hasattr(component, 'children'):
+                ch = component.children
+                if isinstance(ch, list):
+                    for c in ch:
+                        extract_ids(c)
+                elif ch is not None:
+                    extract_ids(ch)
+        for child in children:
+            extract_ids(child)
+        assert 'pc-summary-file-state' in ids
 
 
 class TestCreateDownloadButtons:

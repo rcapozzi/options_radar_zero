@@ -7,33 +7,42 @@ Real-time 0DTE option chain monitoring for SPX, SPY, and ES.
 SPX:
 ![Screenshot](images/demo4.gif)
 
+## Prerequisites
+
+- Python 3.14
+- [uv](https://docs.astral.sh/uv/) for dependency management
+
 ## Setup
 
 ```bash
 uv sync
 ```
 
+## Tastytrade API Credentials
+
 Create a `.env` file with Tastytrade OAuth credentials:
 
 ```ini
 TT_REFRESH=your_refresh_token
-TT_SECRET=your-secret
+TT_SECRET=your-client-secret
 ```
 
-## Development
+Get these from [Tastytrade's developer portal](https://api.developer.tastytrade.com).
+
+## Running the Dashboard Server
 
 ```bash
-make lint      # ruff check
-make typecheck # mypy
-make test      # pytest
-make run       # Start dashboard
+# Local development (auto-reloads on code changes)
+uv run python -m options_radar_zero.app
+# Visits http://localhost:8053
+
+# Or with gunicorn (production)
+uv run gunicorn options_radar_zero.app:server -b :8050 --access-logfile access.log -D
 ```
 
-### Poller
+## Running the Poller
 
-Create a `.env` file with Tastytrade OAuth credentials (see Setup above).
-
-Create a YAML config file:
+The poller requires a YAML config file specifying symbols and strike distances:
 
 ```yaml
 # poller_config.yaml
@@ -49,18 +58,45 @@ symbols:
     strikes: 20
 ```
 
-Run the poller:
+Start the poller:
+
 ```bash
+# Using Makefile
 make poller
-# or
+
+# Or directly
 uv run python -m options_radar_zero.poller.cli --config examples/poller_config.yaml
+
+# Override output directory
+uv run python -m options_radar_zero.poller.cli --config examples/poller_config.yaml --output-dir /custom/path
+
+# End-of-day catch-up (fills gaps from live polling session)
+uv run python -m options_radar_zero.poller.cli --config examples/poller_config.yaml --eod
 ```
 
 A sample config is provided at `examples/poller_config.yaml`.
 
-## Project Structure
+### How the Poller Works
 
-Based on the refactored modular structure — a tested, CI-ready codebase:
+1. **Market open**: Polls option chain market data every minute per symbol (aligned to the top of each minute), writing to `{symbol}.{YYYYMMDD}.chain.parquet`
+2. **Pre-market (after 9am, before 9:30am)**: Automatically sleeps until 9:30 AM market open, then begins polling
+3. **Market closed without `--eod`**: Exits quietly (no catch-up)
+4. **Market closed with `--eod`**: Performs end-of-day catch-up — fetches fresh data and merges into existing parquet files using the **last trade date** as the filename
+
+## Development
+
+```bash
+make lint      # ruff check
+make typecheck # mypy
+make test      # pytest with coverage
+```
+
+### Data Files
+
+- Output: `{symbol}.{YYYYMMDD}.chain.parquet` in the configured `output_dir`
+- Lock file: `.poller.lock` prevents duplicate poller instances
+
+## Project Structure
 
 | Module | Responsibility |
 |--------|---------------|
@@ -78,8 +114,8 @@ Based on the refactored modular structure — a tested, CI-ready codebase:
 | `data_loader.py` | `DataLoader` Class |
 | `utils.py` | Slimmed `OptionQuotes` |
 | `tastytrade_api.py` | Tastytrade API Wrapper |
-| `poller/` | 0DTE Data Poller (CLI) |
+| `poller/` | 0DTE Data Poller CLI |
 
 ## CI
 
-GitHub Actions runs `ruff`, `mypy`, and `pytest` (95% coverage threshold) on Python 3.11–3.14.
+GitHub Actions runs `ruff`, `mypy`, and `pytest` (90% coverage threshold) on Python 3.11–3.14.

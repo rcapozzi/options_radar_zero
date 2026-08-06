@@ -39,6 +39,9 @@ dist/
 build/
 *.egg-info/
 
+# Output data files
+output/
+
 # Logs
 *.log
 access.log

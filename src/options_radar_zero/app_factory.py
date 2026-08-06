@@ -2,20 +2,22 @@
 
 Creates and configures the Dash application instance with all modules wired together.
 """
+
 from __future__ import annotations
 
 import datetime
+import logging
 import warnings
 
 import pytz
-from dash import Dash, html
+from dash import Dash
 
 from options_radar_zero.callbacks import setup_callbacks
 from options_radar_zero.data_loader import DataLoader
 from options_radar_zero.layouts import create_main_layout
 from options_radar_zero.routes import register_routes
 
-warnings.simplefilter(action='ignore', category=UserWarning)
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> Dash:
@@ -24,6 +26,9 @@ def create_app() -> Dash:
     Returns:
         Configured Dash application instance.
     """
+    # Suppress UserWarning globally (only when app is actually created)
+    warnings.simplefilter(action="ignore", category=UserWarning)
+
     # External stylesheets
     external_stylesheets = [
         {
@@ -37,21 +42,19 @@ def create_app() -> Dash:
         external_stylesheets=external_stylesheets,
         suppress_callback_exceptions=True,
     )
-    app.title = 'SPX 0DTE Chain React Analytics Peaker'
+    app.title = "SPX 0DTE Chain React Analytics Peaker"
 
     # Initialize data loader
     data_loader = DataLoader()
     data_loaded = data_loader.load()
 
     # Set up layout
-    if data_loaded:
-        app.layout = create_main_layout(data_loader.symbols)
-    else:
-        app.layout = html.Div([
-            html.Hr(),
-            html.H1("You filthy Degen. Check back during market hours."),
-            html.Span("Error loading data", style={'padding': '5px', 'fontsize:': '10px'}),
-        ])
+    # Even if data loading fails, we show the main layout with the
+    # available symbols list so the user can see what files exist
+    app.layout = create_main_layout(
+        data_loader.symbols,
+        initial_data_loaded=data_loaded,
+    )
 
     # Register Flask routes
     register_routes(app, data_loader)

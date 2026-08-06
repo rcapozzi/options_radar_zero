@@ -189,6 +189,41 @@ class TestMarketIntervalCalculator:
             mock_mcal.get_calendar.side_effect = Exception("calendar error")
             MarketIntervalCalculator()
 
+    def test_get_last_trade_date_returns_date(self):
+        """Test get_last_trade_date returns a date object."""
+        calc = MarketIntervalCalculator()
+        result = calc.get_last_trade_date()
+        assert isinstance(result, datetime.date | None)
+
+    def test_get_last_trade_date_today_is_trading_day(self):
+        """Test get_last_trade_date when today is a trading day."""
+        calc = MarketIntervalCalculator()
+        mock_schedule = MagicMock()
+        mock_schedule.empty = False
+        mock_schedule.iloc = [{"market_open": MagicMock(), "market_close": MagicMock()}]
+
+        with patch.object(calc, '_get_market_schedule_for_date', return_value=mock_schedule):
+            result = calc.get_last_trade_date()
+            assert result is not None
+            assert isinstance(result, datetime.date)
+
+    def test_get_last_trade_date_weekend(self):
+        """Test get_last_trade_date when today is a weekend (no trading)."""
+        calc = MarketIntervalCalculator()
+        empty_schedule = MagicMock()
+        empty_schedule.empty = True
+
+        # Mock: today has no schedule, but 1 day back does
+        past_schedule = MagicMock()
+        past_schedule.empty = False
+
+        with patch.object(
+            calc, '_get_market_schedule_for_date',
+            side_effect=[empty_schedule, past_schedule],
+        ):
+            result = calc.get_last_trade_date()
+            assert result is not None
+
 
 class TestIsMarketOpen:
     def test_returns_bool(self):

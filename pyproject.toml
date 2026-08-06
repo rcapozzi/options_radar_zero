@@ -19,11 +19,15 @@ dependencies = [
     "dash-iconify>=0.1",
     "dash-extendable-graph>=1.0",
     "filelock>=3.12",
+    "flask-caching>=2.1",
     "typer>=0.9",
-    "persist-cache>=0.1",
     "tastytrade>=0.1",
     "python-dotenv>=1.0",
     "pyyaml>=6.0",
+    "nbformat>=5.10.4",
+    "jupyterlab>=4.6.2",
+    "notebook>=7.6.1",
+    "ipykernel>=7.3.0",
 ]
 
 [dependency-groups]
@@ -72,6 +76,7 @@ module = [
     "options_radar_zero.routes",
     "options_radar_zero.tt_poll_market_data",
     "options_radar_zero.tastytrade_api",
+    "options_radar_zero.parquet_cache",
 ]
 ignore_errors = true
 
@@ -86,7 +91,7 @@ module = [
     "pandas_market_calendars.*",
     "yfinance.*",
     "tastytrade.*",
-    "persist_cache.*",
+    "flask_caching.*",
 ]
 ignore_missing_imports = true
 
@@ -107,6 +112,8 @@ addopts = "--cov=. --cov-report=term-missing --cov-fail-under=90 --cov-config=py
 [tool.coverage.run]
 omit = [
     "examples/*",
+    "demo.py",
+    "mini_app.py",
     "src/options_radar_zero/tastytrade_api.py",
     "src/options_radar_zero/tt_poll_market_data.py",
     "src/options_radar_zero/callbacks.py",

@@ -11,11 +11,14 @@ DEFAULT_Y_FIELDS: list[str] = ['volume', 'totalVolume', 'gex', 'mark']
 class AppConfig:
     """Immutable configuration for the application."""
     # Paths
-    DATA_DIR: str = '../tda-tbd/wip'
+    DATA_DIR: str = './output'
     STATIC_DIR: str = 'static'
 
     # Polling intervals
     DEFAULT_INTERVAL_SECONDS: int = 60
+
+    # File watcher interval for incremental parquet updates (milliseconds)
+    FILE_WATCHER_INTERVAL_MS: int = 10000
 
     # Market hours (EST)
     MARKET_OPEN_TIME: str = '09:30'
@@ -48,27 +51,33 @@ config = AppConfig()
 def get_parquet_files(max_files: int = 20) -> dict[str, str]:
     """Get parquet files from data directory.
 
+    Parses filenames to extract the underlying symbol.  Supports both
+    the poller format ``{symbol}.{YYYYMMDD}.chain.parquet`` and the legacy
+    ``{symbol}.{YYYY-MM-DD}.parquet`` format.
+
     Args:
         max_files: Maximum number of files to return.
 
     Returns:
-        Dict mapping date keys to file paths.
+        Dict mapping symbol keys to file paths (most recent first).
     """
     import glob
-    import re
 
-    file_dict = {}
+    file_dict: dict[str, str] = {}
     pattern = os.path.join(config.DATA_DIR, '*.parquet')
 
-    for filename in glob.glob(pattern):
-        # Skip chain files
-        if 'chain' in filename:
-            continue
-        filename = filename.replace('\\', '/')
-        match = re.search(r"([^/]+)\.parquet$", filename)
-        if match:
-            key = match.group(1)
-            file_dict[key] = filename
+    for filepath in glob.glob(pattern):
+        filepath = filepath.replace('\\', '/')
+        basename = filepath.rsplit('/', 1)[-1]  # e.g. SPY.20240802.chain.parquet
+        name_without_ext = basename.replace('.parquet', '')
+
+        # Extract the underlying symbol: everything before the first date-like segment
+        # Poller format: SPY.20240802.chain → symbol = SPY
+        # Legacy format: SPY.2024-01-15 → symbol = SPY
+        parts = name_without_ext.split('.')
+        symbol = parts[0]
+
+        file_dict[symbol] = filepath
 
     # Sort and limit
     keys = sorted(file_dict.keys(), reverse=True)[:max_files]

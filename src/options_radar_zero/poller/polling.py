@@ -71,6 +71,7 @@ async def _poll_single_symbol(
         except Exception as e:
             logger.error("Error polling market data for %s: %s", symbol, e, exc_info=True)
 
+        # Sleep until the next update time (aligned to top of minute)
         next_update_time = market_interval_calculator.get_next_update_time()
         now_in_market_tz = datetime.now(next_update_time.tzinfo)
         next_interval = (next_update_time - now_in_market_tz).total_seconds()
@@ -138,17 +139,20 @@ async def poll_symbols(
     config: PollerConfig,
     api: Any,
     market_interval_calculator: MarketIntervalCalculator,
+    run_eod: bool = False,
 ) -> None:
     """Poll market data for all symbols in the config concurrently.
 
     If the market is currently open, polls in a loop until close.
-    If the market is currently closed, performs an end-of-day catch-up
-    for each symbol (fills gaps in existing parquet files).
+    If the market is closed and ``run_eod`` is True, performs an
+    end-of-day catch-up for each symbol (fills gaps in existing
+    parquet files).
 
     Args:
         config: Poller configuration with symbols and output settings.
         api: A TastyTradeAPI instance.
         market_interval_calculator: A MarketIntervalCalculator instance.
+        run_eod: If True, perform end-of-day catch-up when market is closed.
     """
     if market_interval_calculator.is_market_open():
         tasks = [
@@ -163,19 +167,53 @@ async def poll_symbols(
         ]
         await asyncio.gather(*tasks, return_exceptions=True)
     else:
-        logger.info(
-            "Market is closed. Performing end-of-day catch-up for %s.",
-            ", ".join(config.all_symbols),
-        )
-        tasks = [
-            _end_of_day_catchup(
-                sym_cfg.symbol,
-                sym_cfg.strikes,
-                config.filename_for(sym_cfg.symbol),
-                api,
-                market_interval_calculator,
+        # Check if market is open later today (pre-market: after 9am, before 9:30am)
+        now = datetime.now(market_interval_calculator._market_tz)
+        schedule_today = market_interval_calculator._get_market_schedule_for_date(now.date())
+        if schedule_today is not None and not schedule_today.empty:
+            market_open = schedule_today.iloc[0]['market_open'].astimezone(market_interval_calculator._market_tz)
+            if now < market_open:
+                # Pre-market: sleep until market open, then start polling
+                sleep_seconds = (market_open - now).total_seconds()
+                logger.info(
+                    "Market not open yet. Sleeping %.0f seconds until %s.",
+                    sleep_seconds, market_open,
+                )
+                await asyncio.sleep(sleep_seconds)
+                # Now start polling
+                tasks = [
+                    _poll_single_symbol(
+                        sym_cfg.symbol,
+                        sym_cfg.strikes,
+                        config.filename_for(sym_cfg.symbol),
+                        api,
+                        market_interval_calculator,
+                    )
+                    for sym_cfg in config.symbols
+                ]
+                await asyncio.gather(*tasks, return_exceptions=True)
+                return
+
+        if run_eod:
+            # End-of-day catch-up: use last trade date for filenames
+            last_trade_date = market_interval_calculator.get_last_trade_date()
+            date_label = last_trade_date.strftime("%Y-%m-%d") if last_trade_date else "unknown"
+            logger.info(
+                "Market is closed. Performing end-of-day catch-up for %s (last trade: %s).",
+                ", ".join(config.all_symbols),
+                date_label,
             )
-            for sym_cfg in config.symbols
-        ]
-        await asyncio.gather(*tasks, return_exceptions=True)
-        logger.info("End-of-day catch-up complete.")
+            tasks = [
+                _end_of_day_catchup(
+                    sym_cfg.symbol,
+                    sym_cfg.strikes,
+                    config.filename_for(sym_cfg.symbol, trade_date=last_trade_date),
+                    api,
+                    market_interval_calculator,
+                )
+                for sym_cfg in config.symbols
+            ]
+            await asyncio.gather(*tasks, return_exceptions=True)
+            logger.info("End-of-day catch-up complete.")
+        else:
+            logger.info("Market is closed. Exiting (no --eod flag).")
